@@ -33,6 +33,25 @@ def test_sync_is_deterministic_and_strips_frontmatter(publication: PublicationFi
     assert first["document.pdf"] == b"%PDF fixture\n"
 
 
+def test_sync_accepts_unstaged_changes_to_declared_targets(
+    publication: PublicationFixture,
+) -> None:
+    _accept_local_remote(publication)
+    publisher = Publisher()
+    publisher.sync(publication.config)
+    run("git", "add", "--", "index.html", "README.md", "document.pdf", cwd=publication.checkout)
+    run("git", "commit", "-m", "Accepted publication", cwd=publication.checkout)
+    (publication.checkout / "index.html").write_text("local drift", encoding="utf-8")
+
+    status = run("git", "status", "--porcelain=v1", cwd=publication.checkout).stdout
+    assert status.startswith(" M index.html")
+    publisher.sync(publication.config)
+
+    assert (publication.checkout / "index.html").read_bytes() == (
+        publication.root / "landing" / "index.html"
+    ).read_bytes()
+
+
 @pytest.mark.parametrize(
     ("old_reference", "new_reference", "message"),
     [
@@ -78,6 +97,20 @@ def test_unrelated_dirty_file_blocks_sync(publication: PublicationFixture) -> No
     (publication.checkout / "notes.txt").write_text("private", encoding="utf-8")
     with pytest.raises(EkpempsisError, match="unrelated checkout change"):
         Publisher().sync(publication.config)
+
+
+def test_staged_rename_is_reported_as_an_unrelated_target(
+    publication: PublicationFixture,
+) -> None:
+    _accept_local_remote(publication)
+    publisher = Publisher()
+    publisher.sync(publication.config)
+    run("git", "add", "--", "index.html", "README.md", "document.pdf", cwd=publication.checkout)
+    run("git", "commit", "-m", "Accepted publication", cwd=publication.checkout)
+    run("git", "mv", "index.html", "renamed.html", cwd=publication.checkout)
+
+    with pytest.raises(EkpempsisError, match="renamed.html"):
+        publisher.sync(publication.config)
 
 
 def test_symlinked_target_parent_blocks_sync(

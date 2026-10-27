@@ -9,8 +9,14 @@ from .model import Config
 from .process import Runner
 
 
-def _git(runner: Runner, checkout: Path, *arguments: str) -> str:
-    return runner.run(["git", *arguments], checkout).stdout.strip()
+def _git(
+    runner: Runner,
+    checkout: Path,
+    *arguments: str,
+    preserve_output: bool = False,
+) -> str:
+    output = runner.run(["git", *arguments], checkout).stdout
+    return output if preserve_output else output.strip()
 
 
 def _remote_identity(url: str) -> str:
@@ -45,18 +51,30 @@ def verify_checkout(config: Config, runner: Runner) -> None:
         )
 
     declared = set(config.targets)
-    tracked = set(filter(None, _git(runner, checkout, "ls-files", "-z").split("\0")))
+    tracked = set(
+        filter(
+            None,
+            _git(runner, checkout, "ls-files", "-z", preserve_output=True).split("\0"),
+        )
+    )
     stale = sorted(tracked - declared)
     if stale:
         raise EkpempsisError(f"stale tracked publication target(s): {', '.join(stale)}")
 
-    status = _git(runner, checkout, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+    status = _git(
+        runner,
+        checkout,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--no-renames",
+        "--untracked-files=all",
+        preserve_output=True,
+    )
     records = [record for record in status.split("\0") if record]
     unrelated: list[str] = []
     for record in records:
         path = record[3:]
-        if " -> " in path:
-            path = path.split(" -> ", 1)[1]
         if path not in declared:
             unrelated.append(path)
     if unrelated:
@@ -70,7 +88,18 @@ def commit_image(config: Config, runner: Runner, message: str) -> bool:
     targets = list(config.targets)
     _git(runner, checkout, "add", "--", *targets)
     staged = set(
-        filter(None, _git(runner, checkout, "diff", "--cached", "--name-only", "-z").split("\0"))
+        filter(
+            None,
+            _git(
+                runner,
+                checkout,
+                "diff",
+                "--cached",
+                "--name-only",
+                "-z",
+                preserve_output=True,
+            ).split("\0"),
+        )
     )
     unexpected = sorted(staged - set(targets))
     if unexpected:
@@ -97,5 +126,11 @@ def push(config: Config, runner: Runner) -> None:
 def iter_tracked(config: Config, runner: Runner) -> Iterable[str]:
     """Return tracked paths for diagnostics and tests."""
 
-    output = _git(runner, config.target.checkout, "ls-files", "-z")
+    output = _git(
+        runner,
+        config.target.checkout,
+        "ls-files",
+        "-z",
+        preserve_output=True,
+    )
     return tuple(filter(None, output.split("\0")))
