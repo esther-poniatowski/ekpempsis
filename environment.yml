@@ -1,0 +1,13 @@
+name: ekpempsis-dev
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pyyaml
+  - types-pyyaml
+  - pytest
+  - mypy
+  - ruff
+  - pip
+  - pip:
+      - -e .
