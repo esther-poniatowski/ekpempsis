@@ -41,3 +41,24 @@ files:
 The schema rejects unknown fields. A transform names a built-in operation; configuration cannot
 execute a shell command. Every declared source must exist. Resources that are not ready remain
 absent from `files` and appear without a link in the page.
+
+### Shared publication repositories
+
+Several configurations can publish into one repository when each owns one folder of it. The
+optional field `target.path` names that folder; every `target` of `files`, and the `entrypoint`,
+are then relative to it:
+
+```yaml
+target:
+  repository: owner/owner.github.io
+  checkout: site
+  branch: main
+  provider: github-pages
+  path: 2026-08-event
+```
+
+A configuration then checks only its own folder: a tracked file inside it that `files` does not
+declare is stale, and a local change inside it that `files` does not declare is unrelated. Files
+outside the folder belong to other configurations and are left untouched. A local reference of a
+page must stay inside the folder, since the publication image holds only that folder. Without
+`target.path`, the configuration owns the whole repository.

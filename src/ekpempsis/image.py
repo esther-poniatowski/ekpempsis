@@ -50,8 +50,8 @@ def candidate_image(config: Config) -> Iterator[Path]:
     with tempfile.TemporaryDirectory(prefix="ekpempsis-") as temporary:
         root = Path(temporary)
         try:
-            for mapping in config.files:
-                _write_mapping(mapping, root / Path(*mapping.target.parts))
+            for mapping, target_text in zip(config.files, config.targets):
+                _write_mapping(mapping, root / Path(*PurePosixPath(target_text).parts))
         except OSError as error:
             raise EkpempsisError(f"could not construct publication image: {error}") from error
         yield root
@@ -96,7 +96,7 @@ def _local_target(current: PurePosixPath, reference: str) -> tuple[PurePosixPath
 def validate_image(config: Config, image_root: Path) -> None:
     """Validate size, local references, and fragments in a candidate image."""
 
-    entrypoint = image_root / Path(*config.entrypoint.parts)
+    entrypoint = image_root / Path(*config.in_checkout(config.entrypoint).parts)
     if config.max_entrypoint_bytes is not None:
         size = entrypoint.stat().st_size
         if size > config.max_entrypoint_bytes:
@@ -115,6 +115,10 @@ def validate_image(config: Config, image_root: Path) -> None:
             target, fragment = _local_target(current, reference)
             if not target.parts:
                 continue
+            if not config.owns(target.as_posix()):
+                raise EkpempsisError(
+                    f"local reference leaves the owned target path in {current}: {reference}"
+                )
             target_path = image_root / Path(*target.parts)
             if not target_path.is_file():
                 raise EkpempsisError(f"broken local reference in {current}: {reference}")

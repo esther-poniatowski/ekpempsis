@@ -31,7 +31,11 @@ def _remote_identity(url: str) -> str:
 
 
 def verify_checkout(config: Config, runner: Runner) -> None:
-    """Verify checkout identity, exact tracked set, and unrelated worktree state."""
+    """Verify checkout identity, exact tracked set, and unrelated worktree state.
+
+    With an owned target path, the tracked set and the worktree state are checked inside that
+    folder only; the rest of the checkout belongs to other configurations.
+    """
 
     checkout = config.target.checkout
     if not checkout.is_dir():
@@ -57,7 +61,7 @@ def verify_checkout(config: Config, runner: Runner) -> None:
             _git(runner, checkout, "ls-files", "-z", preserve_output=True).split("\0"),
         )
     )
-    stale = sorted(tracked - declared)
+    stale = sorted(path for path in tracked - declared if config.owns(path))
     if stale:
         raise EkpempsisError(f"stale tracked publication target(s): {', '.join(stale)}")
 
@@ -75,7 +79,7 @@ def verify_checkout(config: Config, runner: Runner) -> None:
     unrelated: list[str] = []
     for record in records:
         path = record[3:]
-        if path not in declared:
+        if path not in declared and config.owns(path):
             unrelated.append(path)
     if unrelated:
         raise EkpempsisError(f"unrelated checkout change(s): {', '.join(sorted(unrelated))}")

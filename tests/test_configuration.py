@@ -101,3 +101,27 @@ def test_configuration_rejects_missing_source(publication: PublicationFixture) -
     (publication.root / "output" / "document.pdf").unlink()
     with pytest.raises(EkpempsisError, match="source does not exist"):
         load_config(publication.config)
+
+
+@pytest.mark.parametrize("path", ["../outside", "/absolute", "events/./workshop"])
+def test_configuration_rejects_an_unnormalized_owned_path(
+    publication: PublicationFixture, path: str
+) -> None:
+    text = publication.config.read_text(encoding="utf-8")
+    publication.config.write_text(
+        text.replace("  provider: github-pages\n", f"  provider: github-pages\n  path: {path}\n"),
+        encoding="utf-8",
+    )
+    with pytest.raises(EkpempsisError, match="target.path"):
+        load_config(publication.config)
+
+
+def test_configuration_reads_an_owned_path(publication: PublicationFixture) -> None:
+    text = publication.config.read_text(encoding="utf-8")
+    publication.config.write_text(
+        text.replace("  provider: github-pages\n", "  provider: github-pages\n  path: events/workshop\n"),
+        encoding="utf-8",
+    )
+    config = load_config(publication.config)
+    assert config.targets == ("events/workshop/index.html", "events/workshop/README.md",
+                              "events/workshop/document.pdf")

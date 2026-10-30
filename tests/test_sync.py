@@ -173,3 +173,62 @@ def test_install_failure_rolls_back_every_replaced_target(
     }
     assert after == before
     assert not list(publication.checkout.glob(".*.ekpempsis-*"))
+
+
+def _scope(publication: PublicationFixture, path: str = "events/workshop") -> None:
+    publication.write_config()
+    text = publication.config.read_text(encoding="utf-8")
+    publication.config.write_text(
+        text.replace("  provider: github-pages\n", f"  provider: github-pages\n  path: {path}\n"),
+        encoding="utf-8",
+    )
+
+
+def test_owned_path_installs_into_its_folder_and_ignores_other_owners(
+    publication: PublicationFixture,
+) -> None:
+    _accept_local_remote(publication)
+    _scope(publication)
+    other = publication.checkout / "events" / "other" / "index.html"
+    other.parent.mkdir(parents=True)
+    other.write_text("another owner", encoding="utf-8")
+    run("git", "add", "--", "events/other/index.html", cwd=publication.checkout)
+    run("git", "commit", "-m", "Another owner", cwd=publication.checkout)
+    other.write_text("another owner, edited", encoding="utf-8")
+
+    Publisher().sync(publication.config)
+
+    owned = publication.checkout / "events" / "workshop"
+    assert sorted(path.name for path in owned.iterdir()) == ["README.md", "document.pdf", "index.html"]
+    assert not (publication.checkout / "index.html").exists()
+    assert other.read_text(encoding="utf-8") == "another owner, edited"
+
+
+def test_owned_path_rejects_an_undeclared_file_inside_its_folder(
+    publication: PublicationFixture,
+) -> None:
+    _accept_local_remote(publication)
+    _scope(publication)
+    stale = publication.checkout / "events" / "workshop" / "old.html"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale", encoding="utf-8")
+    run("git", "add", "--", "events/workshop/old.html", cwd=publication.checkout)
+    run("git", "commit", "-m", "Stale page", cwd=publication.checkout)
+
+    with pytest.raises(EkpempsisError, match="stale tracked publication target"):
+        Publisher().sync(publication.config)
+
+
+def test_owned_path_rejects_a_reference_that_leaves_its_folder(
+    publication: PublicationFixture,
+) -> None:
+    _accept_local_remote(publication)
+    _scope(publication)
+    index = publication.root / "landing" / "index.html"
+    index.write_text(
+        index.read_text(encoding="utf-8").replace('href="document.pdf"', 'href="../other/index.html"'),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(EkpempsisError, match="leaves the owned target path"):
+        Publisher().sync(publication.config)

@@ -14,7 +14,7 @@ from .model import Config, FileMapping, ProviderName, Target, Transform
 from .process import Runner, SubprocessRunner
 
 _TOP_KEYS = {"version", "target", "entrypoint", "files", "max_entrypoint_bytes"}
-_TARGET_KEYS = {"repository", "checkout", "branch", "provider"}
+_TARGET_KEYS = {"repository", "checkout", "branch", "provider", "path"}
 _FILE_KEYS = {"source", "target", "transform"}
 _REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
@@ -132,6 +132,9 @@ def load_config(
     if provider_value != "github-pages":
         _fail("target.provider", "admitted value is github-pages")
     provider = cast(ProviderName, provider_value)
+    owned_path = (
+        _relative(target_data.get("path"), "target.path") if "path" in target_data else None
+    )
 
     files_value = data.get("files")
     if not isinstance(files_value, Sequence) or isinstance(files_value, (str, bytes)) or not files_value:
@@ -192,7 +195,7 @@ def load_config(
     return Config(
         path=config_path,
         repository_root=root,
-        target=Target(repository, checkout, branch, provider),
+        target=Target(repository, checkout, branch, provider, owned_path),
         entrypoint=entrypoint,
         files=tuple(resolved),
         max_entrypoint_bytes=max_bytes,
